@@ -6,6 +6,7 @@ use crate::{AccountId, Env};
 use crate::errors::PSP22Error;
 use prusti_contracts::*;
 
+#[invariant_twostate(self.env() === old(self.env()))]
 pub trait PSP22 {
     #[pure]
     fn env(&self) -> &Env;
@@ -87,6 +88,33 @@ pub trait PSP22 {
     ///
     /// If conditions for both `InsufficientBalance` and `InsufficientAllowance` errors are met,
     /// reverts with `InsufficientAllowance`.
+    #[ensures(
+        (from != to && old(self.balance_of(from)) >= value && (self.env().caller() == from || old(self.allowance(from, self.env().caller())) >= value))
+            ==>
+        forall(|acct_id: AccountId|
+            if acct_id == to {
+                self.balance_of(acct_id) == old(self.balance_of(acct_id)) + value
+            } else if acct_id == from {
+                self.balance_of(acct_id) == old(self.balance_of(acct_id)) - value
+            } else {
+                self.balance_of(acct_id) == old(self.balance_of(acct_id))
+            }
+        )
+    )]
+    #[ensures(to == from ==>
+        forall(|acct_id: AccountId|
+            self.balance_of(acct_id) == old(self.balance_of(acct_id))
+        )
+    )]
+    #[ensures(forall(|a1: AccountId, a2: AccountId|
+        old(self.balance_of(from)) >= value && to != from && (old(self.env().caller()) == from || old(self.allowance(from, self.env().caller())) >= value) ==> {
+            if (from == old(self.env().caller()) || a1 != from || a2 != old(self.env().caller())) {
+                self.allowance(a1, a2) == old(self.allowance(a1, a2))
+            } else {
+                self.allowance(a1, a2) == old(self.allowance(a1, a2)) - value
+            }
+        }
+    ))]
     fn transfer_from(
         &mut self,
         from: AccountId,
