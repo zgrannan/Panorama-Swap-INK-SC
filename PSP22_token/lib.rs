@@ -3,7 +3,7 @@ mod errors;
 mod testing;
 mod traits;
 
-pub use data::{PSP22Data};
+pub use data::PSP22Data;
 pub use errors::PSP22Error;
 pub use traits::{PSP22Burnable, PSP22Metadata, PSP22Mintable, PSP22};
 
@@ -23,12 +23,13 @@ pub struct Env(AccountId);
 // It is a good practice to also implement the optional PSP22Metadata extension (6)
 // and include unit tests (7).
 mod token {
+    use crate::{AccountId, Env, PSP22Data, PSP22Error, PSP22Metadata, PSP22};
+    use crate::data::{Allowance, Money};
     use prusti_contracts::*;
-    use crate::{AccountId, PSP22Data, PSP22Error, PSP22Metadata, PSP22, Env};
 
     impl Env {
         #[pure]
-        fn caller(&self) -> AccountId {
+        pub fn caller(&self) -> AccountId {
             self.0
         }
         fn emit_event<T>(&self, event: T) {}
@@ -43,6 +44,8 @@ mod token {
     }
 
     impl Token {
+
+        #[pure]
         pub fn env(&self) -> &Env {
             &self.env
         }
@@ -52,7 +55,7 @@ mod token {
             name: Option<String>,
             symbol: Option<String>,
             decimals: u8,
-            caller: AccountId
+            caller: AccountId,
         ) -> Self {
             Self {
                 env: Env(caller),
@@ -62,7 +65,6 @@ mod token {
                 decimals,
             }
         }
-
     }
 
     // (3)
@@ -81,14 +83,22 @@ mod token {
 
     // (4)
     impl PSP22 for Token {
+
+        #[pure]
+        fn env(&self) -> &Env {
+            &self.env
+        }
+
         fn total_supply(&self) -> u128 {
             self.data.total_supply()
         }
 
+        #[pure]
         fn balance_of(&self, owner: AccountId) -> u128 {
             self.data.balance_of(owner)
         }
 
+        #[pure]
         fn allowance(&self, owner: AccountId, spender: AccountId) -> u128 {
             self.data.allowance(owner, spender)
         }
@@ -99,9 +109,8 @@ mod token {
             value: u128,
             _data: Vec<u8>,
         ) -> Result<(), PSP22Error> {
-            let events = self.data.transfer(self.env().caller(), to, value)?;
-            // self.emit_events(events);
-            Ok(())
+            produce!(resource(Money(self.env.caller()), value));
+            self.data.transfer(self.env.caller(), to, value)
         }
 
         fn transfer_from(
@@ -111,13 +120,17 @@ mod token {
             value: u128,
             _data: Vec<u8>,
         ) -> Result<(), PSP22Error> {
-            self
-                .data
-                .transfer_from(self.env().caller(), from, to, value)
+            produce!(resource(Money(from), value));
+            produce!(resource(Allowance(from, self.env.caller()), value));
+            self.data.transfer_from(self.env.caller(), from, to, value)
         }
 
         fn approve(&mut self, spender: AccountId, value: u128) -> Result<(), PSP22Error> {
-            self.data.approve(self.env().caller(), spender, value)
+            produce!(resource(Allowance(self.env().caller(), spender), self.allowance(
+                self.env().caller(),
+                spender
+            )));
+            self.data.approve(self.env.caller(), spender, value)
         }
 
         fn increase_allowance(
@@ -125,8 +138,8 @@ mod token {
             spender: AccountId,
             delta_value: u128,
         ) -> Result<(), PSP22Error> {
-            self
-                .data .increase_allowance(self.env().caller(), spender, delta_value)
+            self.data
+                .increase_allowance(self.env.caller(), spender, delta_value)
         }
 
         fn decrease_allowance(
@@ -134,9 +147,8 @@ mod token {
             spender: AccountId,
             delta_value: u128,
         ) -> Result<(), PSP22Error> {
-            self
-                .data
-                .decrease_allowance(self.env().caller(), spender, delta_value)
+            produce!(resource(Allowance(self.env().caller(), spender), delta_value));
+            self.data.decrease_allowance(self.env.caller(), spender, delta_value)
         }
     }
 

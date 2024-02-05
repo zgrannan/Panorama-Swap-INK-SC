@@ -2,21 +2,27 @@ use ink::{
     prelude::{string::String, vec::Vec}
 };
 
-use crate::AccountId;
+use crate::{AccountId, Env};
 use crate::errors::PSP22Error;
+use prusti_contracts::*;
 
 pub trait PSP22 {
+    #[pure]
+    fn env(&self) -> &Env;
+
     /// Returns the total token supply.
     fn total_supply(&self) -> u128;
 
     /// Returns the account balance for the specified `owner`.
     ///
     /// Returns `0` if the account is non-existent.
+    #[pure]
     fn balance_of(&self, owner: AccountId) -> u128;
 
     /// Returns the amount which `spender` is still allowed to withdraw from `owner`.
     ///
     /// Returns `0` if no allowance has been set.
+    #[pure]
     fn allowance(&self, owner: AccountId, spender: AccountId) -> u128;
 
     /// Transfers `value` amount of tokens from the caller's account to account `to`
@@ -32,6 +38,27 @@ pub trait PSP22 {
     /// # Errors
     ///
     /// Reverts with `InsufficientBalance` if the `value` exceeds the caller's balance.
+    #[ensures(
+        old(self.balance_of(self.env().caller())) >= value && to != self.env().caller()
+            ==>
+        forall(|acct_id: AccountId|
+            if acct_id == to {
+                self.balance_of(acct_id) == old(self.balance_of(acct_id)) + value
+            } else if acct_id == self.env().caller() {
+                self.balance_of(acct_id) == old(self.balance_of(acct_id)) - value
+            } else {
+                self.balance_of(acct_id) == old(self.balance_of(acct_id))
+            }
+        )
+    )]
+    #[ensures(to == self.env().caller() ==>
+        forall(|acct_id: AccountId|
+            self.balance_of(acct_id) == old(self.balance_of(acct_id))
+        )
+    )]
+    #[ensures(forall(|a1: AccountId, a2: AccountId|
+        self.allowance(a1, a2) == old(self.allowance(a1, a2))
+    ))]
     fn transfer(&mut self, to: AccountId, value: u128, data: Vec<u8>) -> Result<(), PSP22Error>;
 
     /// Transfers `value` tokens on the behalf of `from` to the account `to`
