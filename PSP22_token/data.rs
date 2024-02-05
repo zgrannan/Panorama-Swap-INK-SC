@@ -2,7 +2,6 @@ use crate::PSP22Error;
 use ink::prelude::string::String;
 use ink::{
     prelude::{vec, vec::Vec},
-    primitives::AccountId,
     storage::Mapping,
 };
 
@@ -23,6 +22,8 @@ pub enum PSP22Event {
     },
 }
 
+type AccountId = u32;
+
 /// A class implementing the internal logic of a PSP22 token.
 //
 /// Holds the state of all account balances and allowances.
@@ -35,8 +36,6 @@ pub enum PSP22Event {
 /// (compared to transactions defined by the PSP22 standard or the PSP22 trait).
 //
 /// `lib.rs` contains an example implementation of a smart contract using this class.
-#[ink::storage_item]
-#[derive(Debug, Default)]
 pub struct PSP22Data {
     total_supply: u128,
     balances: Mapping<AccountId, u128>,
@@ -73,9 +72,9 @@ impl PSP22Data {
         caller: AccountId,
         to: AccountId,
         value: u128,
-    ) -> Result<Vec<PSP22Event>, PSP22Error> {
+    ) -> Result<(), PSP22Error> {
         if caller == to || value == 0 {
-            return Ok(vec![]);
+            return Ok(());
         }
         let from_balance = self.balance_of(caller);
         if from_balance < value {
@@ -92,11 +91,7 @@ impl PSP22Data {
         // Total supply is limited by u128.MAX so no overflow is possible
         self.balances
             .insert(to, &(to_balance.saturating_add(value)));
-        Ok(vec![PSP22Event::Transfer {
-            from: Some(caller),
-            to: Some(to),
-            value,
-        }])
+        Ok(())
     }
 
     /// Transfers `value` tokens from `from` to `to`, but using the allowance
@@ -107,9 +102,9 @@ impl PSP22Data {
         from: AccountId,
         to: AccountId,
         value: u128,
-    ) -> Result<Vec<PSP22Event>, PSP22Error> {
+    ) -> Result<(), PSP22Error> {
         if from == to || value == 0 {
-            return Ok(vec![]);
+            return Ok(());
         }
         if caller == from {
             return self.transfer(caller, to, value);
@@ -141,18 +136,7 @@ impl PSP22Data {
         // Total supply is limited by u128.MAX so no overflow is possible
         self.balances
             .insert(to, &(to_balance.saturating_add(value)));
-        Ok(vec![
-            PSP22Event::Approval {
-                owner: from,
-                spender: caller,
-                amount: allowance.saturating_sub(value),
-            },
-            PSP22Event::Transfer {
-                from: Some(from),
-                to: Some(to),
-                value,
-            },
-        ])
+        Ok(())
     }
 
     /// Sets a new `value` for allowance granted by `owner` to `spender`.

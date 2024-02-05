@@ -1,5 +1,3 @@
-#![cfg_attr(not(feature = "std"), no_std, no_main)]
-
 mod data;
 mod errors;
 mod testing;
@@ -8,6 +6,9 @@ mod traits;
 pub use data::{PSP22Data, PSP22Event};
 pub use errors::PSP22Error;
 pub use traits::{PSP22Burnable, PSP22Metadata, PSP22Mintable, PSP22};
+
+pub type AccountId = u32;
+pub struct Env(AccountId);
 
 // An example code of a smart contract using PSP22Data struct to implement
 // the functionality of PSP22 fungible token.
@@ -21,30 +22,41 @@ pub use traits::{PSP22Burnable, PSP22Metadata, PSP22Mintable, PSP22};
 //
 // It is a good practice to also implement the optional PSP22Metadata extension (6)
 // and include unit tests (7).
-#[cfg(feature = "contract")]
-#[ink::contract]
 mod token {
-    use crate::{PSP22Data, PSP22Error, PSP22Event, PSP22Metadata, PSP22};
-    use ink::prelude::{string::String, vec::Vec};
+    use prusti_contracts::*;
+    use crate::{AccountId, PSP22Data, PSP22Error, PSP22Event, PSP22Metadata, PSP22, Env};
 
-    #[ink(storage)]
+    impl Env {
+        #[pure]
+        fn caller(&self) -> AccountId {
+            self.0
+        }
+        fn emit_event<T>(&self, event: T) {}
+    }
+
     pub struct Token {
         data: PSP22Data, // (1)
         name: Option<String>,
         symbol: Option<String>,
         decimals: u8,
+        env: Env,
     }
 
     impl Token {
-        #[ink(constructor)]
+        pub fn env(&self) -> &Env {
+            &self.env
+        }
+
         pub fn new(
             supply: u128,
             name: Option<String>,
             symbol: Option<String>,
             decimals: u8,
+            caller: AccountId
         ) -> Self {
             Self {
-                data: PSP22Data::new(supply, Self::env().caller()), // (2)
+                env: Env(caller),
+                data: PSP22Data::new(supply, caller), // (2)
                 name,
                 symbol,
                 decimals,
@@ -75,43 +87,33 @@ mod token {
     }
 
     // (3)
-    #[ink(event)]
     pub struct Approval {
-        #[ink(topic)]
         owner: AccountId,
-        #[ink(topic)]
         spender: AccountId,
         amount: u128,
     }
 
     // (3)
-    #[ink(event)]
     pub struct Transfer {
-        #[ink(topic)]
         from: Option<AccountId>,
-        #[ink(topic)]
         to: Option<AccountId>,
         value: u128,
     }
 
     // (4)
     impl PSP22 for Token {
-        #[ink(message)]
         fn total_supply(&self) -> u128 {
             self.data.total_supply()
         }
 
-        #[ink(message)]
         fn balance_of(&self, owner: AccountId) -> u128 {
             self.data.balance_of(owner)
         }
 
-        #[ink(message)]
         fn allowance(&self, owner: AccountId, spender: AccountId) -> u128 {
             self.data.allowance(owner, spender)
         }
 
-        #[ink(message)]
         fn transfer(
             &mut self,
             to: AccountId,
@@ -119,11 +121,10 @@ mod token {
             _data: Vec<u8>,
         ) -> Result<(), PSP22Error> {
             let events = self.data.transfer(self.env().caller(), to, value)?;
-            self.emit_events(events);
+            // self.emit_events(events);
             Ok(())
         }
 
-        #[ink(message)]
         fn transfer_from(
             &mut self,
             from: AccountId,
@@ -134,18 +135,16 @@ mod token {
             let events = self
                 .data
                 .transfer_from(self.env().caller(), from, to, value)?;
-            self.emit_events(events);
+            // self.emit_events(events);
             Ok(())
         }
 
-        #[ink(message)]
         fn approve(&mut self, spender: AccountId, value: u128) -> Result<(), PSP22Error> {
             let events = self.data.approve(self.env().caller(), spender, value)?;
             self.emit_events(events);
             Ok(())
         }
 
-        #[ink(message)]
         fn increase_allowance(
             &mut self,
             spender: AccountId,
@@ -158,7 +157,6 @@ mod token {
             Ok(())
         }
 
-        #[ink(message)]
         fn decrease_allowance(
             &mut self,
             spender: AccountId,
@@ -174,15 +172,12 @@ mod token {
 
     // (6)
     impl PSP22Metadata for Token {
-        #[ink(message)]
         fn token_name(&self) -> Option<String> {
             self.name.clone()
         }
-        #[ink(message)]
         fn token_symbol(&self) -> Option<String> {
             self.symbol.clone()
         }
-        #[ink(message)]
         fn token_decimals(&self) -> u8 {
             self.decimals
         }

@@ -1,26 +1,22 @@
 use ink::{
-    prelude::{string::String, vec::Vec},
-    primitives::AccountId,
+    prelude::{string::String, vec::Vec}
 };
 
+use crate::AccountId;
 use crate::errors::PSP22Error;
 
-#[ink::trait_definition]
 pub trait PSP22 {
     /// Returns the total token supply.
-    #[ink(message)]
     fn total_supply(&self) -> u128;
 
     /// Returns the account balance for the specified `owner`.
     ///
     /// Returns `0` if the account is non-existent.
-    #[ink(message)]
     fn balance_of(&self, owner: AccountId) -> u128;
 
     /// Returns the amount which `spender` is still allowed to withdraw from `owner`.
     ///
     /// Returns `0` if no allowance has been set.
-    #[ink(message)]
     fn allowance(&self, owner: AccountId, spender: AccountId) -> u128;
 
     /// Transfers `value` amount of tokens from the caller's account to account `to`
@@ -36,7 +32,6 @@ pub trait PSP22 {
     /// # Errors
     ///
     /// Reverts with `InsufficientBalance` if the `value` exceeds the caller's balance.
-    #[ink(message)]
     fn transfer(&mut self, to: AccountId, value: u128, data: Vec<u8>) -> Result<(), PSP22Error>;
 
     /// Transfers `value` tokens on the behalf of `from` to the account `to`
@@ -65,7 +60,6 @@ pub trait PSP22 {
     ///
     /// If conditions for both `InsufficientBalance` and `InsufficientAllowance` errors are met,
     /// reverts with `InsufficientAllowance`.
-    #[ink(message)]
     fn transfer_from(
         &mut self,
         from: AccountId,
@@ -84,7 +78,6 @@ pub trait PSP22 {
     /// An `Approval` event is emitted.
     ///
     /// No-op if the caller and `spender` is the same address, returns success and no events are emitted.
-    #[ink(message)]
     fn approve(&mut self, spender: AccountId, value: u128) -> Result<(), PSP22Error>;
 
     /// Increases by `delta-value` the allowance granted to `spender` by the caller.
@@ -95,7 +88,6 @@ pub trait PSP22 {
     ///
     /// No-op if the caller and `spender` is the same address or `delta-value` is zero, returns success
     /// and no events are emitted.
-    #[ink(message)]
     fn increase_allowance(
         &mut self,
         spender: AccountId,
@@ -115,7 +107,6 @@ pub trait PSP22 {
     ///
     /// Reverts with `InsufficientAllowance` if `spender` and the caller are different addresses and
     /// the `delta-value` exceeds the allowance granted by the caller to `spender`.
-    #[ink(message)]
     fn decrease_allowance(
         &mut self,
         spender: AccountId,
@@ -123,20 +114,12 @@ pub trait PSP22 {
     ) -> Result<(), PSP22Error>;
 }
 
-#[ink::trait_definition]
 pub trait PSP22Metadata {
-    /// Returns the token name.
-    #[ink(message)]
     fn token_name(&self) -> Option<String>;
-    /// Returns the token symbol.
-    #[ink(message)]
     fn token_symbol(&self) -> Option<String>;
-    /// Returns the token decimals.
-    #[ink(message)]
     fn token_decimals(&self) -> u8;
 }
 
-#[ink::trait_definition]
 pub trait PSP22Burnable {
     /// Burns `value` tokens from the senders account.
     ///
@@ -151,11 +134,9 @@ pub trait PSP22Burnable {
     /// # Errors
     ///
     /// Reverts with `InsufficientBalance` if the `value` exceeds the caller's balance.
-    #[ink(message)]
     fn burn(&mut self, value: u128) -> Result<(), PSP22Error>;
 }
 
-#[ink::trait_definition]
 pub trait PSP22Mintable {
     /// Mints `value` tokens to the senders account.
     ///
@@ -171,6 +152,5 @@ pub trait PSP22Mintable {
     ///
     /// Reverts with `Custom (max supply exceeded)` if the total supply increased by
     /// `value` exceeds maximal value of `u128` type.
-    #[ink(message)]
     fn mint(&mut self, value: u128) -> Result<(), PSP22Error>;
 }
