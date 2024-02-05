@@ -149,10 +149,13 @@ impl PSP22Data {
         if from_balance < value {
             return Err(PSP22Error::InsufficientBalance);
         }
-
-        self.balances.insert(caller, from_balance - value);
+        if from_balance == value {
+            self.balances.remove(caller);
+        } else {
+            self.balances
+                .insert(caller, from_balance - value);
+        }
         let to_balance = self.balance_of(to);
-        prusti_assume!(u128::MAX - to_balance >= value);
         self.balances.insert(to, to_balance + value);
         consume!(resource(Money(caller), value));
         produce!(resource(Money(to), value));
@@ -251,7 +254,11 @@ impl PSP22Data {
             return Ok(());
         }
         consume!(resource(Allowance(owner, spender), self.allowance(owner, spender)));
-        self.allowances.insert((owner, spender), value);
+        if value == 0 {
+            self.allowances.remove((owner, spender));
+        } else {
+            self.allowances.insert((owner, spender), value);
+        }
         produce!(resource(Allowance(owner, spender), value));
         Ok(())
     }
@@ -298,8 +305,12 @@ impl PSP22Data {
         if allowance < delta_value {
             return Err(PSP22Error::InsufficientAllowance);
         }
-        let new_allowance = allowance - delta_value;
-        self.allowances.insert((owner, spender), new_allowance);
+        let amount = allowance - delta_value;
+        if amount == 0 {
+            self.allowances.remove((owner, spender));
+        } else {
+            self.allowances.insert((owner, spender), amount);
+        }
         consume!(resource(Allowance(owner, spender), delta_value));
         Ok(())
     }
@@ -334,7 +345,11 @@ impl PSP22Data {
         if balance < value {
             return Err(PSP22Error::InsufficientBalance);
         }
-        self.balances.insert(from, balance - value);
+        if balance == value {
+            self.balances.remove(from);
+        } else {
+            self.balances.insert(from, balance - value);
+        }
         prusti_assume!(self.total_supply >= value);
         self.total_supply = self.total_supply - value;
         consume!(resource(Money(from), value));
