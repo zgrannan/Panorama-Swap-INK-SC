@@ -1,7 +1,9 @@
 mod data;
+mod data_noresource;
 mod errors;
 mod testing;
 mod traits;
+mod types;
 
 pub use data::PSP22Data;
 pub use errors::PSP22Error;

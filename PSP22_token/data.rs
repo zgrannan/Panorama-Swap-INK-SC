@@ -52,22 +52,6 @@ pub struct Money(pub AccountId);
 #[resource_kind]
 pub struct Allowance(pub AccountId, pub AccountId);
 
-#[extern_spec]
-impl<T: Default> Option<T> {
-    #[pure]
-    #[ensures(result == matches!(self, None))]
-    fn is_none(&self) -> bool;
-
-    #[pure]
-    #[ensures(result == matches!(self, Some(_)))]
-    fn is_some(&self) -> bool;
-
-    #[pure]
-    #[requires(self.is_some())]
-    #[ensures(self === Some(result))]
-    fn unwrap(self) -> T;
-}
-
 /// A class implementing the internal logic of a PSP22 token.
 ///
 /// Holds the state of all account balances and allowances.
@@ -210,13 +194,9 @@ impl PSP22Data {
         }
 
         if from_balance == value {
-            prusti_assert!(self.balance_of(from) == from_balance);
             self.balances.remove(from);
-            prusti_assert!(matches!(self.balances.get(from), None));
-            prusti_assert!(self.balance_of(from) == from_balance - value);
         } else {
             self.balances.insert(from, from_balance - value);
-            prusti_assert!(self.balance_of(from) == from_balance - value);
         }
         let to_balance = self.balance_of(to);
         // Total supply is limited by u128.MAX so no overflow is possible
@@ -224,9 +204,6 @@ impl PSP22Data {
         consume!(resource(Allowance(from, caller), value));
         consume!(resource(Money(from), value));
         produce!(resource(Money(to), value));
-        prusti_assert!(self.balance_of(from) == from_balance - value);
-        prusti_assert!(self.balance_of(to) == to_balance + value);
-        prusti_assert!(self.allowance(from, caller) == allowance - value);
         Ok(())
     }
 

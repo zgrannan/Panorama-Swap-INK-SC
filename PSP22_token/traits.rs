@@ -91,7 +91,7 @@ pub trait PSP22 {
         if (
             old(self.balance_of(from)) >= value &&
             to != from &&
-            (old(self.env().caller()) == from || old(self.allowance(from, self.env().caller())) >= value)
+            (self.env().caller() == from || old(self.allowance(from, self.env().caller())) >= value)
         ) {
             forall(|acct_id: AccountId|
                 if acct_id == to {
