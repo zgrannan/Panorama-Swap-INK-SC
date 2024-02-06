@@ -1,3 +1,4 @@
+use cfg_if::cfg_if;
 use ink::{
     prelude::{string::String, vec::Vec}
 };
@@ -39,6 +40,7 @@ pub trait PSP22 {
     /// # Errors
     ///
     /// Reverts with `InsufficientBalance` if the `value` exceeds the caller's balance.
+    #[cfg(not(feature="resource_trait_api"))]
     #[ensures(
         if (old(self.balance_of(self.env().caller())) >= value && to != self.env().caller()) {
             forall(|acct_id: AccountId|
@@ -60,6 +62,7 @@ pub trait PSP22 {
         self.allowance(a1, a2) == old(self.allowance(a1, a2))
     ))]
     fn transfer(&mut self, to: AccountId, value: u128, data: Vec<u8>) -> Result<(), PSP22Error>;
+
 
     /// Transfers `value` tokens on the behalf of `from` to the account `to`
     /// with additional `data` in unspecified format.

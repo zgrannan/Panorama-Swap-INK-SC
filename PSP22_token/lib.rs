@@ -1,3 +1,4 @@
+#[cfg(feature="resource")]
 mod data;
 mod data_noresource;
 mod errors;
@@ -5,7 +6,10 @@ mod testing;
 mod traits;
 mod types;
 
+#[cfg(feature="resource")]
 pub use data::PSP22Data;
+#[cfg(not(feature="resource"))]
+pub use data_noresource::PSP22Data;
 pub use errors::PSP22Error;
 pub use traits::{PSP22Burnable, PSP22Metadata, PSP22Mintable, PSP22};
 
@@ -26,6 +30,7 @@ pub struct Env(AccountId);
 // and include unit tests (7).
 mod token {
     use crate::{AccountId, Env, PSP22Data, PSP22Error, PSP22Metadata, PSP22};
+    #[cfg(feature="resource")]
     use crate::data::{Allowance, Money};
     use prusti_contracts::*;
 
@@ -111,6 +116,7 @@ mod token {
             value: u128,
             _data: Vec<u8>,
         ) -> Result<(), PSP22Error> {
+            #[cfg(feature="resource")]
             produce!(resource(Money(self.env.caller()), value));
             self.data.transfer(self.env.caller(), to, value)
         }
@@ -122,12 +128,17 @@ mod token {
             value: u128,
             _data: Vec<u8>,
         ) -> Result<(), PSP22Error> {
-            produce!(resource(Money(from), value));
-            produce!(resource(Allowance(from, self.env.caller()), value));
+            #[cfg(not(feature="resource_trait_api"))]
+            #[cfg(feature="resource")] {
+                produce!(resource(Money(from), value));
+                produce!(resource(Allowance(from, self.env.caller()), value));
+            }
             self.data.transfer_from(self.env.caller(), from, to, value)
         }
 
         fn approve(&mut self, spender: AccountId, value: u128) -> Result<(), PSP22Error> {
+            #[cfg(not(feature="resource_trait_api"))]
+            #[cfg(feature="resource")]
             produce!(resource(Allowance(self.env().caller(), spender), self.allowance(
                 self.env().caller(),
                 spender
@@ -149,6 +160,8 @@ mod token {
             spender: AccountId,
             delta_value: u128,
         ) -> Result<(), PSP22Error> {
+            #[cfg(not(feature="resource_trait_api"))]
+            #[cfg(feature="resource")]
             produce!(resource(Allowance(self.env().caller(), spender), delta_value));
             self.data.decrease_allowance(self.env.caller(), spender, delta_value)
         }

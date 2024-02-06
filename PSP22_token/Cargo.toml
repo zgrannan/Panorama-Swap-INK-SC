@@ -11,6 +11,7 @@ description = "Minimal implementation of PSP22 token standard in pure ink!"
 exclude = [ ".github/*" ]
 
 [dependencies]
+cfg-if = { version = "1.0" }
 ink = { version = "4.3", default-features = false }
 prusti-contracts = { path = "/Users/zgrannan/prusti-dev/prusti-contracts/prusti-contracts" }
 
