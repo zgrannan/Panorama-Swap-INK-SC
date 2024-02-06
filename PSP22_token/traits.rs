@@ -40,22 +40,21 @@ pub trait PSP22 {
     ///
     /// Reverts with `InsufficientBalance` if the `value` exceeds the caller's balance.
     #[ensures(
-        old(self.balance_of(self.env().caller())) >= value && to != self.env().caller()
-            ==>
-        forall(|acct_id: AccountId|
-            if acct_id == to {
-                self.balance_of(acct_id) == old(self.balance_of(acct_id)) + value
-            } else if acct_id == self.env().caller() {
-                self.balance_of(acct_id) == old(self.balance_of(acct_id)) - value
-            } else {
+        if (old(self.balance_of(self.env().caller())) >= value && to != self.env().caller()) {
+            forall(|acct_id: AccountId|
+                if acct_id == to {
+                    self.balance_of(acct_id) == old(self.balance_of(acct_id)) + value
+                } else if acct_id == self.env().caller() {
+                    self.balance_of(acct_id) == old(self.balance_of(acct_id)) - value
+                } else {
+                    self.balance_of(acct_id) == old(self.balance_of(acct_id))
+                }
+            )
+        } else {
+            forall(|acct_id: AccountId|
                 self.balance_of(acct_id) == old(self.balance_of(acct_id))
-            }
-        )
-    )]
-    #[ensures(to == self.env().caller() ==>
-        forall(|acct_id: AccountId|
-            self.balance_of(acct_id) == old(self.balance_of(acct_id))
-        )
+            )
+        }
     )]
     #[ensures(forall(|a1: AccountId, a2: AccountId|
         self.allowance(a1, a2) == old(self.allowance(a1, a2))
@@ -89,32 +88,46 @@ pub trait PSP22 {
     /// If conditions for both `InsufficientBalance` and `InsufficientAllowance` errors are met,
     /// reverts with `InsufficientAllowance`.
     #[ensures(
-        (from != to && old(self.balance_of(from)) >= value && (self.env().caller() == from || old(self.allowance(from, self.env().caller())) >= value))
-            ==>
-        forall(|acct_id: AccountId|
-            if acct_id == to {
-                self.balance_of(acct_id) == old(self.balance_of(acct_id)) + value
-            } else if acct_id == from {
-                self.balance_of(acct_id) == old(self.balance_of(acct_id)) - value
-            } else {
+        if (
+            old(self.balance_of(from)) >= value &&
+            to != from &&
+            (old(self.env().caller()) == from || old(self.allowance(from, self.env().caller())) >= value)
+        ) {
+            forall(|acct_id: AccountId|
+                if acct_id == to {
+                    self.balance_of(acct_id) == old(self.balance_of(acct_id)) + value
+                } else if acct_id == from {
+                    self.balance_of(acct_id) == old(self.balance_of(acct_id)) - value
+                } else {
+                    self.balance_of(acct_id) == old(self.balance_of(acct_id))
+                }
+            )
+        } else {
+            forall(|acct_id: AccountId|
                 self.balance_of(acct_id) == old(self.balance_of(acct_id))
-            }
-        )
-    )]
-    #[ensures(to == from ==>
-        forall(|acct_id: AccountId|
-            self.balance_of(acct_id) == old(self.balance_of(acct_id))
-        )
-    )]
-    #[ensures(forall(|a1: AccountId, a2: AccountId|
-        old(self.balance_of(from)) >= value && to != from && (old(self.env().caller()) == from || old(self.allowance(from, self.env().caller())) >= value) ==> {
-            if (from == old(self.env().caller()) || a1 != from || a2 != old(self.env().caller())) {
-                self.allowance(a1, a2) == old(self.allowance(a1, a2))
-            } else {
-                self.allowance(a1, a2) == old(self.allowance(a1, a2)) - value
-            }
+            )
         }
-    ))]
+    )]
+    #[ensures(
+        if (
+            old(self.balance_of(from)) >= value &&
+            to != from &&
+            self.env().caller() != from &&
+            old(self.allowance(from, self.env().caller())) >= value
+        ) {
+            forall(|a1: AccountId, a2: AccountId|
+                if (a1 == from && a2 == self.env().caller()) {
+                    self.allowance(a1, a2) == old(self.allowance(a1, a2)) - value
+                } else {
+                    self.allowance(a1, a2) == old(self.allowance(a1, a2))
+                }
+            )
+        } else {
+            forall(|a1: AccountId, a2: AccountId|
+                self.allowance(a1, a2) == old(self.allowance(a1, a2))
+            )
+        }
+    )]
     fn transfer_from(
         &mut self,
         from: AccountId,
@@ -133,6 +146,20 @@ pub trait PSP22 {
     /// An `Approval` event is emitted.
     ///
     /// No-op if the caller and `spender` is the same address, returns success and no events are emitted.
+    #[ensures(
+        forall(|a1: AccountId, a2: AccountId|
+            if (self.env().caller() != spender && a1 == self.env().caller() && a2 == spender) {
+                self.allowance(a1, a2) == value
+            } else {
+                self.allowance(a1, a2) == old(self.allowance(a1, a2))
+            }
+        )
+    )]
+    #[ensures(
+        forall(|a1: AccountId|
+            self.balance_of(a1) == old(self.balance_of(a1))
+        )
+    )]
     fn approve(&mut self, spender: AccountId, value: u128) -> Result<(), PSP22Error>;
 
     /// Increases by `delta-value` the allowance granted to `spender` by the caller.
@@ -143,6 +170,20 @@ pub trait PSP22 {
     ///
     /// No-op if the caller and `spender` is the same address or `delta-value` is zero, returns success
     /// and no events are emitted.
+    #[ensures(
+        forall(|a1: AccountId, a2: AccountId|
+            self.allowance(a1, a2) == if (self.env().caller() != spender && a1 == self.env().caller() && a2 == spender) {
+                old(self.allowance(a1, a2)) + delta_value
+            } else {
+                old(self.allowance(a1, a2))
+            }
+        )
+    )]
+    #[ensures(
+        forall(|a1: AccountId|
+            self.balance_of(a1) == old(self.balance_of(a1))
+        )
+    )]
     fn increase_allowance(
         &mut self,
         spender: AccountId,
@@ -162,6 +203,25 @@ pub trait PSP22 {
     ///
     /// Reverts with `InsufficientAllowance` if `spender` and the caller are different addresses and
     /// the `delta-value` exceeds the allowance granted by the caller to `spender`.
+    #[ensures(
+        forall(|a1: AccountId, a2: AccountId|
+            self.allowance(a1, a2) == if (
+                old(self.allowance(a1, a2)) >= delta_value &&
+                self.env().caller() != spender &&
+                a1 == self.env().caller() &&
+                a2 == spender
+            ) {
+                old(self.allowance(a1, a2)) - delta_value
+            } else {
+                old(self.allowance(a1, a2))
+            }
+        )
+    )]
+    #[ensures(
+        forall(|a1: AccountId|
+            self.balance_of(a1) == old(self.balance_of(a1))
+        )
+    )]
     fn decrease_allowance(
         &mut self,
         spender: AccountId,
