@@ -46,9 +46,11 @@ impl<T: Copy, U: Copy> Mapping<T, U> {
     }
 }
 
+#[cfg(feature="resource")]
 #[resource_kind]
 pub struct Money(pub AccountId);
 
+#[cfg(feature="resource")]
 #[resource_kind]
 pub struct Allowance(pub AccountId, pub AccountId);
 
@@ -65,18 +67,18 @@ pub struct Allowance(pub AccountId, pub AccountId);
 ///
 /// `lib.rs` contains an example implementation of a smart contract using this class.
 ///
-#[invariant_twostate(
+#[cfg_attr(feature="resource", invariant_twostate(
     forall(|owner: AccountId| {
         PermAmount::from(self.balance_of(owner)) - old(PermAmount::from(self.balance_of(owner)))
         == holds(Money(owner)) - old(holds(Money(owner)))
     }, triggers=[(Money(owner), self.balance_of(owner))])
-)]
-#[invariant_twostate(
+))]
+#[cfg_attr(feature="resource", invariant_twostate(
     forall(|a1: AccountId, a2: AccountId| {
         PermAmount::from(self.allowance(a1, a2)) - old(PermAmount::from(self.allowance(a1, a2)))
         == holds(Allowance(a1, a2)) - old(holds(Allowance(a1, a2)))
     })
-)]
+))]
 pub struct PSP22Data {
     total_supply: u128,
     balances: Mapping<AccountId, u128>,
@@ -118,8 +120,28 @@ impl PSP22Data {
     }
 
     /// Transfers `value` tokens from `caller` to `to`.
-    #[requires(self.balance_of(caller) >= value ==> resource(Money(caller), value))]
-    #[ensures(old(self.balance_of(caller)) >= value ==> resource(Money(to), value))]
+    #[cfg_attr(feature="resource", requires(self.balance_of(caller) >= value ==> resource(Money(caller), value)))]
+    #[cfg_attr(feature="resource", ensures(old(self.balance_of(caller)) >= value ==> resource(Money(to), value)))]
+    #[cfg_attr(not(feature="resource"), ensures(
+        if (old(self.balance_of(caller)) >= value && to != caller) {
+            forall(|acct_id: AccountId|
+                if acct_id == to {
+                    self.balance_of(acct_id) == old(self.balance_of(acct_id)) + value
+                } else if acct_id == caller {
+                    self.balance_of(acct_id) == old(self.balance_of(acct_id)) - value
+                } else {
+                    self.balance_of(acct_id) == old(self.balance_of(acct_id))
+                }
+            )
+        } else {
+            forall(|acct_id: AccountId|
+                self.balance_of(acct_id) == old(self.balance_of(acct_id))
+            )
+        }
+    ))]
+    #[cfg_attr(not(feature="resource"), ensures(forall(|a1: AccountId, a2: AccountId|
+        self.allowance(a1, a2) == old(self.allowance(a1, a2))
+    )))]
     pub fn transfer(
         &mut self,
         caller: AccountId,
@@ -141,29 +163,71 @@ impl PSP22Data {
         }
         let to_balance = self.balance_of(to);
         self.balances.insert(to, to_balance + value);
-        consume!(resource(Money(caller), value));
-        produce!(resource(Money(to), value));
+        #[cfg(feature="resource")] {
+            consume!(resource(Money(caller), value));
+            produce!(resource(Money(to), value));
+        }
         Ok(())
     }
 
     /// Transfers `value` tokens from `from` to `to`, but using the allowance
     /// granted by `from` to `caller`.
-    #[requires(
+    #[cfg_attr(feature="resource", requires(
         from != to &&
         self.balance_of(from) >= value &&
         (caller == from || self.allowance(from, caller) >= value) ==>
-        resource(Money(from), value))]
-    #[requires(
+        resource(Money(from), value)))]
+    #[cfg_attr(feature="resource", requires(
         from != to &&
         self.balance_of(from) >= value &&
         caller != from &&
         self.allowance(from, caller) >= value ==>
-        resource(Allowance(from, caller), value))]
-    #[ensures(
+        resource(Allowance(from, caller), value)))]
+    #[cfg_attr(feature="resource", ensures(
         from != to &&
         old(self.balance_of(from)) >= value &&
         (caller == from || old(self.allowance(from, caller)) >= value) ==>
-        resource(Money(to), value))]
+        resource(Money(to), value)))]
+    #[cfg_attr(not(feature="resource"), ensures(if (
+        old(self.balance_of(from)) >= value &&
+        to != from &&
+        (caller == from || old(self.allowance(from, caller)) >= value)
+    ) {
+        forall(|acct_id: AccountId|
+            if acct_id == to {
+                self.balance_of(acct_id) == old(self.balance_of(acct_id)) + value
+            } else if acct_id == from {
+                self.balance_of(acct_id) == old(self.balance_of(acct_id)) - value
+            } else {
+                self.balance_of(acct_id) == old(self.balance_of(acct_id))
+            }
+        )
+    } else {
+        forall(|acct_id: AccountId|
+            self.balance_of(acct_id) == old(self.balance_of(acct_id))
+        )
+    }
+))]
+    #[cfg_attr(not(feature="resource"), ensures(
+    if (
+        old(self.balance_of(from)) >= value &&
+        to != from &&
+        caller != from &&
+        old(self.allowance(from, caller)) >= value
+    ) {
+        forall(|a1: AccountId, a2: AccountId|
+            if (a1 == from && a2 == caller) {
+                self.allowance(a1, a2) == old(self.allowance(a1, a2)) - value
+            } else {
+                self.allowance(a1, a2) == old(self.allowance(a1, a2))
+            }
+        )
+    } else {
+        forall(|a1: AccountId, a2: AccountId|
+            self.allowance(a1, a2) == old(self.allowance(a1, a2))
+        )
+    }
+))]
     pub fn transfer_from(
         &mut self,
         caller: AccountId,
@@ -201,26 +265,43 @@ impl PSP22Data {
         let to_balance = self.balance_of(to);
         // Total supply is limited by u128.MAX so no overflow is possible
         self.balances.insert(to, to_balance + value);
-        consume!(resource(Allowance(from, caller), value));
-        consume!(resource(Money(from), value));
-        produce!(resource(Money(to), value));
+        #[cfg(feature="resource")] {
+            consume!(resource(Allowance(from, caller), value));
+            consume!(resource(Money(from), value));
+            produce!(resource(Money(to), value));
+        }
         Ok(())
     }
 
     /// Sets a new `value` for allowance granted by `owner` to `spender`.
     /// Overwrites the previously granted value.
-    #[requires(
+    #[cfg_attr(feature="resource", requires(
         owner != spender ==> resource(
             Allowance(owner, spender),
             self.allowance(owner, spender)
         )
-    )]
-    #[ensures(
+    ))]
+    #[cfg_attr(feature="resource", ensures(
         owner != spender ==> resource(
             Allowance(owner, spender),
             value
         )
-    )]
+    ))]
+
+    #[cfg_attr(not(feature="resource"), ensures(
+        forall(|a1: AccountId, a2: AccountId|
+            if (owner != spender && a1 == owner && a2 == spender) {
+                self.allowance(a1, a2) == value
+            } else {
+                self.allowance(a1, a2) == old(self.allowance(a1, a2))
+            }
+        )
+    ))]
+    #[cfg_attr(not(feature="resource"), ensures(
+        forall(|a1: AccountId|
+            self.balance_of(a1) == old(self.balance_of(a1))
+        )
+    ))]
     pub fn approve(
         &mut self,
         owner: AccountId,
@@ -230,23 +311,39 @@ impl PSP22Data {
         if owner == spender {
             return Ok(());
         }
-        consume!(resource(Allowance(owner, spender), self.allowance(owner, spender)));
+        #[cfg(feature="resource")]
+        produce!(resource(Allowance(owner, spender), value));
         if value == 0 {
             self.allowances.remove((owner, spender));
         } else {
             self.allowances.insert((owner, spender), value);
         }
+        #[cfg(feature="resource")]
         produce!(resource(Allowance(owner, spender), value));
         Ok(())
     }
 
     /// Increases the allowance granted by `owner` to `spender` by `delta_value`.
-    #[ensures(
+    #[cfg_attr(feature="resource", ensures(
         owner != spender ==> resource(
             Allowance(owner, spender),
             delta_value
         )
-    )]
+    ))]
+    #[cfg_attr(not(feature="resource"), ensures(
+        forall(|a1: AccountId, a2: AccountId|
+            self.allowance(a1, a2) == if (owner != spender && a1 == owner && a2 == spender) {
+                old(self.allowance(a1, a2)) + delta_value
+            } else {
+                old(self.allowance(a1, a2))
+            }
+        )
+    ))]
+    #[cfg_attr(not(feature="resource"), ensures(
+        forall(|a1: AccountId|
+            self.balance_of(a1) == old(self.balance_of(a1))
+        )
+    ))]
     pub fn increase_allowance(
         &mut self,
         owner: AccountId,
@@ -258,17 +355,37 @@ impl PSP22Data {
         }
         let allowance = self.allowance(owner, spender) + delta_value;
         self.allowances.insert((owner, spender), allowance);
+        #[cfg(feature="resource")]
         produce!(resource(Allowance(owner, spender), delta_value));
         Ok(())
     }
 
     /// Decreases the allowance granted by `owner` to `spender` by `delta_value`.
-    #[requires(
+    #[cfg_attr(feature="resource", requires(
         owner != spender && self.allowance(owner, spender) >= delta_value ==> resource(
             Allowance(owner, spender),
             delta_value
         )
-    )]
+    ))]
+    #[cfg_attr(not(feature="resource"), ensures(
+        forall(|a1: AccountId, a2: AccountId|
+            self.allowance(a1, a2) == if (
+                old(self.allowance(a1, a2)) >= delta_value &&
+                owner != spender &&
+                a1 == owner &&
+                a2 == spender
+            ) {
+                old(self.allowance(a1, a2)) - delta_value
+            } else {
+                old(self.allowance(a1, a2))
+            }
+        )
+    ))]
+    #[cfg_attr(not(feature="resource"), ensures(
+        forall(|a1: AccountId|
+            self.balance_of(a1) == old(self.balance_of(a1))
+        )
+    ))]
     pub fn decrease_allowance(
         &mut self,
         owner: AccountId,
@@ -288,12 +405,16 @@ impl PSP22Data {
         } else {
             self.allowances.insert((owner, spender), amount);
         }
+        #[cfg(feature="resource")]
         consume!(resource(Allowance(owner, spender), delta_value));
         Ok(())
     }
 
     /// Mints `value` of new tokens to `to` account.
-    #[ensures(u128::MAX - old(self.total_supply) >= value ==> resource(Money(to), value))]
+    #[cfg_attr(
+        feature="resource",
+        ensures(u128::MAX - old(self.total_supply) >= value ==> resource(Money(to), value))
+    )]
     pub fn mint(&mut self, to: AccountId, value: u128) -> Result<(), PSP22Error> {
         if value == 0 {
             return Ok(());
@@ -308,12 +429,13 @@ impl PSP22Data {
         prusti_assume!(u128::MAX - self.balance_of(to) >= value);
         let new_balance = self.balance_of(to) + value;
         self.balances.insert(to, new_balance);
+        #[cfg(feature="resource")]
         produce!(resource(Money(to), value));
         Ok(())
     }
 
     /// Burns `value` tokens from `from` account.
-    #[requires(self.balance_of(from) >= value ==> resource(Money(from), value))]
+    #[cfg_attr(feature="resource", requires(self.balance_of(from) >= value ==> resource(Money(from), value)))]
     pub fn burn(&mut self, from: AccountId, value: u128) -> Result<(), PSP22Error> {
         if value == 0 {
             return Ok(());
@@ -329,6 +451,7 @@ impl PSP22Data {
         }
         prusti_assume!(self.total_supply >= value);
         self.total_supply = self.total_supply - value;
+        #[cfg(feature="resource")]
         consume!(resource(Money(from), value));
         Ok(())
     }

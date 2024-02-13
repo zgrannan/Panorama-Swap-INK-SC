@@ -1,15 +1,10 @@
-#[cfg(feature="resource")]
 mod data;
-mod data_noresource;
 mod errors;
 mod testing;
 mod traits;
 mod types;
 
-#[cfg(feature="resource")]
 pub use data::PSP22Data;
-#[cfg(not(feature="resource"))]
-pub use data_noresource::PSP22Data;
 pub use errors::PSP22Error;
 pub use traits::{PSP22Burnable, PSP22Metadata, PSP22Mintable, PSP22};
 

@@ -40,7 +40,6 @@ pub trait PSP22 {
     /// # Errors
     ///
     /// Reverts with `InsufficientBalance` if the `value` exceeds the caller's balance.
-    #[cfg(not(feature="resource_trait_api"))]
     #[ensures(
         if (old(self.balance_of(self.env().caller())) >= value && to != self.env().caller()) {
             forall(|acct_id: AccountId|

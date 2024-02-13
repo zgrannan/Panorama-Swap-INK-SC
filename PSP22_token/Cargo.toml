@@ -22,11 +22,15 @@ scale-info = { version = "2.9", default-features = false, features = ["derive"],
 path = "lib.rs"
 
 [features]
-default = ["std"]
+default = [
+    "std",
+    # "resource"
+]
 std = [
     "ink/std",
     "scale/std",
     "scale-info/std",
 ]
+resource = []
 contract = []
 ink-as-dependency = []
